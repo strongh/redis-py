@@ -1,5 +1,6 @@
 import datetime
 import time
+import hashlib
 import warnings
 from itertools import imap, izip, starmap
 from redis.connection import ConnectionPool, UnixDomainSocketConnection
@@ -9,7 +10,13 @@ from redis.exceptions import (
     RedisError,
     ResponseError,
     WatchError,
+    InvalidResponse,
 )
+
+def sha(string):
+    m = hashlib.sha1()
+    m.update(string)
+    return m.hexdigest()
 
 def list_or_args(keys, args):
     # returns a single list combining keys and args
@@ -1035,6 +1042,32 @@ class Redis(object):
         Returns the number of subscribers the message was delivered to.
         """
         return self.execute_command('PUBLISH', channel, message)
+
+    def eval(self, body, *keys):
+        """
+        Evaluate the Lua body with the first n arguments as keys.
+        TODO: support ARGVs
+        """
+        return self.execute_command('EVAL', body, len(keys), *keys)
+
+    def evalsha(self, body, *keys):
+        """
+        Sends the SHA1 of the Lua body. If the server has seen
+        the script before, it executes it on the given arguments.
+        """
+        return self.execute_command('EVALSHA', sha(body), len(keys), *keys)
+
+    def evals(self, body, *keys):
+        """
+        First tries to send Lua script body via SHA1,
+        falls back to sending entire body.
+        """
+        try:
+            r = self.evalsha(body, *keys)
+        except InvalidResponse as e:
+            r = self.eval(body, *keys)
+        return r
+
 
 
 class PubSub(object):

@@ -2,6 +2,10 @@
 
 The Python interface to the Redis key-value store.
 
+NB: This branch requires a redis server which has 
+been checked out of one of redis' scripting branches. 
+standard redis doesn't currently eval! 
+
 ## Installation
 
     $ sudo pip install redis
