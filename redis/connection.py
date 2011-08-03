@@ -89,9 +89,9 @@ class HiredisParser(object):
             if not buffer:
                 raise ConnectionError("Socket closed on remote end")
             self._reader.feed(buffer)
-            # if the data received doesn't end with \r\n, then there's more in
-            # the socket
-            if not buffer.endswith('\r\n'):
+            # proactively, but not conclusively, check if more data is in the
+            # buffer. if the data received doesn't end with \n, there's more.
+            if not buffer.endswith('\n'):
                 continue
             response = self._reader.gets()
         return response
@@ -174,32 +174,23 @@ class Connection(object):
             pass
         self._sock = None
 
-    def _send(self, command):
-        "Send the command to the socket"
+    def send_packed_command(self, command):
+        "Send an already packed command to the Redis server"
         if not self._sock:
             self.connect()
         try:
             self._sock.sendall(command)
         except socket.error, e:
-            if e.args[0] == errno.EPIPE:
-                self.disconnect()
+            self.disconnect()
             if len(e.args) == 1:
                 _errno, errmsg = 'UNKNOWN', e.args[0]
             else:
                 _errno, errmsg = e.args
             raise ConnectionError("Error %s while writing to socket. %s." % \
                 (_errno, errmsg))
-
-    def send_packed_command(self, command):
-        "Send an already packed command to the Redis server"
-        try:
-            self._send(command)
-        except ConnectionError:
-            # retry the command once in case the socket connection simply
-            # timed out
+        except:
             self.disconnect()
-            # if this _send() call fails, then the error will be raised
-            self._send(command)
+            raise
 
     def send_command(self, *args):
         "Pack and send a command to the Redis server"
@@ -207,7 +198,11 @@ class Connection(object):
 
     def read_response(self):
         "Read the response from a previously sent command"
-        response = self._parser.read_response()
+        try:
+            response = self._parser.read_response()
+        except:
+            self.disconnect()
+            raise
         if response.__class__ == ResponseError:
             raise response
         return response

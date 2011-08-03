@@ -1,6 +1,46 @@
-* 2.4.6 (in development)
+* 2.4.10 (in development)
+    * Renamed the base client class to StrictRedis, replacing ZADD and LREM in
+      favor of their official argument order. The Redis class is now a subclass
+      of StrictRedis, implementing the legacy redis-py implementations of ZADD
+      and LREM. Docs have been updated to suggesting the use of StrictRedis.
+    * SETEX in StrictRedis is now compliant with official Redis SETEX command.
+      the name, value, time implementation moved to "Redis" for backwards
+      compatability.
+* 2.4.9
+    * Removed socket retry logic in Connection. This is the responsbility of
+      the caller to determine if the command is safe and can be retried. Thanks
+      David Wolver.
+    * Added some extra guards around various types of exceptions being raised
+      when sending or parsing data. Thanks David Wolver and Denis Bilenko.
+* 2.4.8
+    * Imported with_statement from __future__ for Python 2.5 compatability.
+* 2.4.7
+    * Fixed a bug where some connections were not getting released back to the
+      connection pool after pipeline execution.
+    * Pipelines can now be used as context managers. This is the preferred way
+      of use to ensure that connections get cleaned up properly. Thanks
+      David Wolever.
+    * Added a convenience method called transaction() on the base Redis class.
+      This method eliminates much of the boilerplate used when using pipelines
+      to watch Redis keys. See the documentation for details on usage.
+* 2.4.6
     * Variadic arguments for SADD, SREM, ZREN, HDEL, LPUSH, and RPUSH. Thanks
       Raphaël Vinot.
+    * (CRITICAL) Fixed an error in the Hiredis parser that occasionally caused
+      the socket connection to become corrupted and unusable. This became
+      noticeable once connection pools started to be used.
+    * ZRANGE, ZREVRANGE, ZRANGEBYSCORE, and ZREVRANGEBYSCORE now take an
+      additional optional argument, score_cast_func, which is a callable used
+      to cast the score value in the return type. The default is float.
+    * Removed the PUBLISH method from the PubSub class. Connections that are
+      [P]SUBSCRIBEd cannot issue PUBLISH commands, so it doesn't make sense
+      to have it here.
+    * Pipelines now contain WATCH and UNWATCH. Calling WATCH or UNWATCH from
+      the base client class will result in a deprecation warning. After
+      WATCHing one or more keys, the pipeline will be placed in immediate
+      execution mode until UNWATCH or MULTI are called. Refer to the new
+      pipeline docs in the README for more information. Thanks to David Wolever
+      and Randall Leeds for greatly helping with this.
 * 2.4.5
     * The PythonParser now works better when reading zero length strings.
 * 2.4.4

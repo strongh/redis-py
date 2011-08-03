@@ -7,8 +7,8 @@ from redis.client import parse_info
 
 class ServerCommandsTestCase(unittest.TestCase):
 
-    def get_client(self):
-        return redis.Redis(host='localhost', port=6379, db=9)
+    def get_client(self, cls=redis.Redis):
+        return cls(host='localhost', port=6379, db=9)
 
     def setUp(self):
         self.client = self.get_client()
@@ -266,27 +266,6 @@ class ServerCommandsTestCase(unittest.TestCase):
         self.client.zadd('a', **{'1': 1})
         self.assertEquals(self.client.type('a'), 'zset')
 
-    def test_watch(self):
-        self.client.set("a", 1)
-        self.client.set("b", 2)
-
-        self.client.watch("a", "b")
-        pipeline = self.client.pipeline()
-        pipeline.set("a", 2)
-        pipeline.set("b", 3)
-        self.assertEquals(pipeline.execute(), [True, True])
-
-        self.client.set("b", 1)
-        self.client.watch("b")
-        self.get_client().set("b", 2)
-        pipeline = self.client.pipeline()
-        pipeline.set("b", 3)
-
-        self.assertRaises(redis.exceptions.WatchError, pipeline.execute)
-
-    def test_unwatch(self):
-        self.assertEquals(self.client.unwatch(), True)
-
     # LISTS
     def make_list(self, name, l):
         for i in l:
@@ -458,20 +437,6 @@ class ServerCommandsTestCase(unittest.TestCase):
         self.make_list('a', 'abc')
         self.assert_(self.client.ltrim('a', 0, 1))
         self.assertEquals(self.client.lrange('a', 0, 5), ['a', 'b'])
-
-    def test_lpop(self):
-        # no key
-        self.assertEquals(self.client.lpop('a'), None)
-        # key is not a list
-        self.client['a'] = 'b'
-        self.assertRaises(redis.ResponseError, self.client.lpop, 'a')
-        del self.client['a']
-        # real logic
-        self.make_list('a', 'abc')
-        self.assertEquals(self.client.lpop('a'), 'a')
-        self.assertEquals(self.client.lpop('a'), 'b')
-        self.assertEquals(self.client.lpop('a'), 'c')
-        self.assertEquals(self.client.lpop('a'), None)
 
     def test_rpop(self):
         # no key
@@ -791,7 +756,6 @@ class ServerCommandsTestCase(unittest.TestCase):
             [('a3', 20), ('a1', 23)]
             )
 
-
     def test_zrange(self):
         # key is not a zset
         self.client['a'] = 'a'
@@ -805,9 +769,12 @@ class ServerCommandsTestCase(unittest.TestCase):
             [('a1', 1.0), ('a2', 2.0)])
         self.assertEquals(self.client.zrange('a', 1, 2, withscores=True),
             [('a2', 2.0), ('a3', 3.0)])
+        # test a custom score casting function returns the correct value
+        self.assertEquals(
+            self.client.zrange('a', 0, 1, withscores=True, score_cast_func=int),
+            [('a1', 1), ('a2', 2)])
         # a non existant key should return empty list
         self.assertEquals(self.client.zrange('b', 0, 1, withscores=True), [])
-
 
     def test_zrangebyscore(self):
         # key is not a zset
@@ -894,7 +861,7 @@ class ServerCommandsTestCase(unittest.TestCase):
         # a non existant key should return empty list
         self.assertEquals(self.client.zrange('b', 0, 1, withscores=True), [])
 
-    def test_zrangebyscore(self):
+    def test_zrevrangebyscore(self):
         # key is not a zset
         self.client['a'] = 'a'
         self.assertRaises(redis.ResponseError, self.client.zrevrangebyscore,
@@ -1211,6 +1178,21 @@ class ServerCommandsTestCase(unittest.TestCase):
         self.assertEquals(num, 4)
         self.assertEquals(self.client.lrange('sorted', 0, 10),
             ['vodka', 'milk', 'gin', 'apple juice'])
+
+    def test_strict_zadd(self):
+        client = self.get_client(redis.StrictRedis)
+        client.zadd('a', 1.0, 'a1', 2.0, 'a2', a3=3.0)
+        self.assertEquals(client.zrange('a', 0, 3, withscores=True),
+                          [('a1', 1.0), ('a2', 2.0), ('a3', 3.0)])
+
+    def test_strict_lrem(self):
+        client = self.get_client(redis.StrictRedis)
+        client.rpush('a', 'a1')
+        client.rpush('a', 'a2')
+        client.rpush('a', 'a3')
+        client.rpush('a', 'a1')
+        client.lrem('a', 0, 'a1')
+        self.assertEquals(client.lrange('a', 0, -1), ['a2', 'a3'])
 
     ## BINARY SAFE
     # TODO add more tests
